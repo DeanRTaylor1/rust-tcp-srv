@@ -1,7 +1,29 @@
-#[derive(Debug)]
+use std::str::FromStr;
+
+#[derive(Debug, Clone, Copy)]
 pub enum HttpMethod {
     Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+    Unknown,
     Unsupported,
+}
+
+impl FromStr for HttpMethod {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "GET" => Ok(HttpMethod::Get),
+            "POST" => Ok(HttpMethod::Post),
+            "PUT" => Ok(HttpMethod::Put),
+            "PATCH" => Ok(HttpMethod::Patch),
+            "DELETE" => Ok(HttpMethod::Delete),
+            _ => Ok(HttpMethod::Unknown),
+        }
+    }
 }
 
 pub struct HttpRequest {

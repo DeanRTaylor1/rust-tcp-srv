@@ -2,6 +2,8 @@ use once_cell::sync::Lazy;
 use std::env;
 use std::fmt::Display;
 
+use crate::http::{HttpMethod, RequestResponse};
+
 static DEV_MODE: Lazy<bool> = Lazy::new(|| {
     env::var("ENV")
         .unwrap_or_else(|_| "development".to_string())
@@ -17,17 +19,8 @@ pub enum LogLevel {
     Error,
 }
 
+#[derive(Default, Debug)]
 pub struct Logger {}
-
-#[derive(Debug)]
-pub enum HttpMethod {
-    Get,
-    Post,
-    Put,
-    Patch,
-    Delete,
-    Unknown,
-}
 
 impl Display for HttpMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -37,6 +30,7 @@ impl Display for HttpMethod {
             HttpMethod::Put => write!(f, "PUT"),
             HttpMethod::Patch => write!(f, "PATCH"),
             HttpMethod::Delete => write!(f, "DELETE"),
+            HttpMethod::Unsupported => write!(f, "UNSUPPORTED"),
             HttpMethod::Unknown => write!(f, "UNKNOWN"),
         }
     }
@@ -99,6 +93,7 @@ impl Logger {
             HttpMethod::Put => (ColorCode::BG_YELLOW, "      "),
             HttpMethod::Patch => (ColorCode::BG_MAGENTA, "    "),
             HttpMethod::Delete => (ColorCode::BG_RED, "   "),
+            HttpMethod::Unsupported => (ColorCode::BG_MAGENTA, "   "),
             HttpMethod::Unknown => (ColorCode::BG_BLACK, ""),
         };
 
@@ -117,6 +112,26 @@ impl Logger {
         {
             println!("{} {} {}", method_str, path, status_str);
         }
+    }
+
+    pub fn log_http(request: &RequestResponse) {
+        if !*DEV_MODE {
+            return;
+        }
+
+        let method_str =
+            Self::format_method(request.method).unwrap_or_else(|| request.method.to_string());
+        let status_str =
+            Self::format_status(request.status).unwrap_or_else(|| request.status.to_string());
+
+        println!(
+            "{} {} | {} | {} | {}ms",
+            method_str,
+            request.path,
+            request.ip,
+            status_str,
+            request.duration.as_millis()
+        );
     }
 
     pub fn panic(&self, message: &str) -> ! {

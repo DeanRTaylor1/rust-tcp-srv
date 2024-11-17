@@ -1,7 +1,9 @@
-use crate::http::HttpHandler;
+use crate::http::{HttpHandler, HttpMethod, RequestResponse};
+use crate::logger::{LogLevel, Logger};
 
 use bytes::BytesMut;
 use std::io;
+use std::str::FromStr;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufWriter},
     net::TcpStream,
@@ -20,13 +22,20 @@ pub struct Connection {
     stream: BufWriter<TcpStream>,
 
     buffer: BytesMut,
+
+    logger: Logger,
 }
 
 impl Connection {
     pub fn new(stream: TcpStream) -> Result<Self, io::Error> {
         let stream = BufWriter::new(stream);
         let buffer = BytesMut::with_capacity(1024 * 1024);
-        Ok(Self { stream, buffer })
+        let logger = Logger::new();
+        Ok(Self {
+            stream,
+            buffer,
+            logger,
+        })
     }
 
     pub async fn process(mut self) -> io::Result<()> {
@@ -40,8 +49,16 @@ impl Connection {
 
         match self.detect_protocol(first_bytes) {
             Protocol::Http1 => {
-                println!("HTTP/1.1 request detected");
-                println!("Raw request: {}", String::from_utf8_lossy(&self.buffer));
+                self.logger
+                    .log(LogLevel::Debug, "HTTP/1.1 request detected");
+                self.logger.log(
+                    LogLevel::Debug,
+                    format!(
+                        "Raw request: {}",
+                        String::from_utf8_lossy(&self.buffer).as_ref()
+                    )
+                    .as_str(),
+                );
                 self.handle_http().await?;
             }
             Protocol::Unknown => println!("Unknown protocol"),
@@ -50,10 +67,36 @@ impl Connection {
         Ok(())
     }
 
-    async fn handle_http(&mut self) -> io::Result<()> {
+    pub async fn handle_http(&mut self) -> io::Result<()> {
+        let start_time = std::time::Instant::now();
+
+        let ip = self.stream.get_ref().peer_addr()?.to_string();
+
+        let request_line = std::str::from_utf8(&self.buffer)
+            .ok()
+            .and_then(|s| s.lines().next())
+            .unwrap_or("");
+
+        let mut parts = request_line.split_whitespace();
+        let method = parts
+            .next()
+            .map(|s| HttpMethod::from_str(s).unwrap_or(HttpMethod::Unknown))
+            .unwrap_or(HttpMethod::Unknown);
+
+        let path = parts.next().unwrap_or("/").to_string();
+
         let response = HttpHandler::handle(&self.buffer);
-        println!("Sending response: {:?}", String::from_utf8_lossy(&response));
-        self.stream.write_all(&response).await?;
+        let duration = start_time.elapsed();
+
+        Logger::log_http(&RequestResponse {
+            method,
+            path,
+            ip,
+            status: response.status,
+            duration,
+        });
+
+        self.stream.write_all(&response.buffer).await?;
         self.stream.flush().await
     }
 

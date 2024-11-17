@@ -78,6 +78,7 @@ impl ResponseBuilder {
         // Add blank line and body
         response.extend_from_slice(b"\r\n");
         response.extend_from_slice(&self.body);
+
         response
     }
 
