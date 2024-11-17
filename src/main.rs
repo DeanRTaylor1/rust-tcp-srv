@@ -1,10 +1,7 @@
-use rust_tcp_srv::{Config, EnvValidator, Logger, Server};
+use rust_tcp_srv::{Config, Server};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let logger = Logger::new(true);
-    let validator = EnvValidator::new(logger);
-    let config = Config::from_env(&validator);
-    let server = Server::new(config);
+    let server = Server::new(Config::default());
     server.run().await
 }

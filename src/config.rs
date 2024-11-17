@@ -62,7 +62,8 @@ impl From<ConfigBuilder> for Config {
 }
 
 impl Config {
-    pub fn from_env(validator: &EnvValidator) -> Self {
+    pub fn from_env() -> Self {
+        let validator = EnvValidator::new(Logger::new());
         Self {
             host: validator.get_var("HOST", "a string (e.g., '127.0.0.1')"),
             port: validator.get_var_parse("PORT", "a number between 0-65535"),
@@ -84,13 +85,10 @@ impl EnvValidator {
     }
 
     pub fn error(&self, key: &str, type_info: &str) -> ! {
-        self.logger.log(
-            LogLevel::Error,
-            &format!("Missing environment variable: {}", key),
-        );
         self.logger
             .log(LogLevel::Warning, &format!("Set {} as {}", key, type_info));
-        panic!("Failed to load configuration");
+        self.logger
+            .panic(&format!("Missing environment variable: {}", key));
     }
 
     pub fn get_var(&self, key: &str, type_info: &str) -> String {

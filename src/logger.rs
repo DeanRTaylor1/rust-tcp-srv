@@ -1,4 +1,13 @@
+use once_cell::sync::Lazy;
+use std::env;
 use std::fmt::Display;
+
+static DEV_MODE: Lazy<bool> = Lazy::new(|| {
+    env::var("ENV")
+        .unwrap_or_else(|_| "development".to_string())
+        .to_lowercase()
+        == "development"
+});
 
 #[derive(Debug, Clone, Copy)]
 pub enum LogLevel {
@@ -8,9 +17,7 @@ pub enum LogLevel {
     Error,
 }
 
-pub struct Logger {
-    dev_mode: bool,
-}
+pub struct Logger {}
 
 #[derive(Debug)]
 pub enum HttpMethod {
@@ -53,13 +60,21 @@ impl ColorCode {
 }
 
 impl Logger {
-    pub fn new(dev_mode: bool) -> Self {
-        Self { dev_mode }
+    /// Creates a new Logger instance.
+    /// Note: This logger only outputs in development mode (ENV="development").
+    /// For production logging, please set up your own logging infrastructure.
+    pub fn new() -> Self {
+        if !*DEV_MODE {
+            println!("Note: Development logger is disabled in production mode");
+        } else {
+            println!("Development logger enabled, to disable set ENV=production");
+        }
+        return Self {};
     }
 
-    fn format_status(&self, status: u16) -> String {
-        if !self.dev_mode {
-            return format!(" {} ", status);
+    fn format_status(status: u16) -> Option<String> {
+        if !*DEV_MODE {
+            return None;
         }
 
         let color = match status {
@@ -70,12 +85,12 @@ impl Logger {
             _ => ColorCode::BG_BLACK,
         };
 
-        format!("{} {} {}", color.0, status, ColorCode::RESET.0)
+        Some(format!("{} {} {}", color.0, status, ColorCode::RESET.0))
     }
 
-    fn format_method(&self, method: HttpMethod) -> String {
-        if !self.dev_mode {
-            return format!("{}", method);
+    fn format_method(method: HttpMethod) -> Option<String> {
+        if !*DEV_MODE {
+            return None;
         }
 
         let (color, padding) = match method {
@@ -87,17 +102,39 @@ impl Logger {
             HttpMethod::Unknown => (ColorCode::BG_BLACK, ""),
         };
 
-        format!("{} {}{} =>{}", color.0, method, padding, ColorCode::RESET.0)
+        Some(format!(
+            "{} {}{} =>{}",
+            color.0,
+            method,
+            padding,
+            ColorCode::RESET.0
+        ))
     }
 
     pub fn log_request(&self, method: HttpMethod, path: &str, status: u16) {
-        let method_str = self.format_method(method);
-        let status_str = self.format_status(status);
-        println!("{} {} {}", method_str, path, status_str);
+        if let (Some(method_str), Some(status_str)) =
+            (Self::format_method(method), Self::format_status(status))
+        {
+            println!("{} {} {}", method_str, path, status_str);
+        }
+    }
+
+    pub fn panic(&self, message: &str) -> ! {
+        let (bg_color, fg_color, label) = (ColorCode::BG_RED, ColorCode::FG_RED, "ERROR");
+        println!(
+            "{} {} {} {} {} {}",
+            bg_color.0,
+            label,
+            ColorCode::RESET.0,
+            fg_color.0,
+            message,
+            ColorCode::RESET.0
+        );
+        panic!();
     }
 
     pub fn log(&self, level: LogLevel, message: &str) {
-        if !self.dev_mode {
+        if !*DEV_MODE {
             println!("[{}] {}", level.as_str(), message);
             return;
         }
