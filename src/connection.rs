@@ -1,4 +1,4 @@
-use crate::http::{HttpHandler, HttpMethod, RequestResponse};
+use crate::http::{HttpHandler, HttpMethod, RequestResponse, ResponseBuilder};
 use crate::logger::{LogLevel, Logger};
 
 use bytes::BytesMut;
@@ -24,6 +24,14 @@ pub struct Connection {
     buffer: BytesMut,
 
     logger: Logger,
+
+    http_handler: HttpHandler,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct JsonData {
+    message: String,
+    // Add other fields you expect in the JSON
 }
 
 impl Connection {
@@ -31,10 +39,30 @@ impl Connection {
         let stream = BufWriter::new(stream);
         let buffer = BytesMut::with_capacity(1024 * 1024);
         let logger = Logger::new();
+        let mut http_handler = HttpHandler::new();
+
+        // TODO: Move this somewhere else/public APi
+        http_handler.get("/", |_req| {
+            ResponseBuilder::ok_response("Hello from Dean's server!")
+        });
+
+        http_handler.post("/", |req| {
+            match req.json_body::<JsonData>() {
+                Some(body) => {
+                    println!("JSON body: {}", body.message);
+                }
+                None => {
+                    return ResponseBuilder::bad_request().text("Bad Request").build();
+                }
+            }
+            return ResponseBuilder::ok_response("Hello from Dean's server!");
+        });
+
         Ok(Self {
             stream,
             buffer,
             logger,
+            http_handler,
         })
     }
 
@@ -76,7 +104,7 @@ impl Connection {
 
         let path = parts.next().unwrap_or("/").to_string();
 
-        let response = HttpHandler::handle(&self.buffer);
+        let response = self.http_handler.handle(&self.buffer);
         let duration = start_time.elapsed();
 
         Logger::log_http(&RequestResponse {

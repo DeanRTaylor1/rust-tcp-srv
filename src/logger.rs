@@ -20,51 +20,23 @@ pub enum LogLevel {
     Application,
 }
 
-#[derive(Default, Debug)]
-pub struct Logger {}
-
-impl Display for HttpMethod {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HttpMethod::Get => write!(f, "GET"),
-            HttpMethod::Post => write!(f, "POST"),
-            HttpMethod::Put => write!(f, "PUT"),
-            HttpMethod::Patch => write!(f, "PATCH"),
-            HttpMethod::Delete => write!(f, "DELETE"),
-            HttpMethod::Unsupported => write!(f, "UNSUPPORTED"),
-            HttpMethod::Unknown => write!(f, "UNKNOWN"),
-        }
+static LOGGER_INIT: Lazy<()> = Lazy::new(|| {
+    if !*DEV_MODE {
+        println!("Note: Development logger is disabled in production mode");
+    } else {
+        println!("Development logger enabled, to disable set ENV=production");
     }
-}
+});
 
-struct ColorCode(&'static str);
-
-impl ColorCode {
-    const BG_BLACK: ColorCode = ColorCode("\x1b[40m");
-    const BG_RED: ColorCode = ColorCode("\x1b[41m");
-    const BG_GREEN: ColorCode = ColorCode("\x1b[42m");
-    const BG_YELLOW: ColorCode = ColorCode("\x1b[43m");
-    const BG_BLUE: ColorCode = ColorCode("\x1b[44m");
-    const BG_MAGENTA: ColorCode = ColorCode("\x1b[45m");
-    const BG_CYAN: ColorCode = ColorCode("\x1b[46m");
-    const FG_RED: ColorCode = ColorCode("\x1b[31m");
-    const FG_GREEN: ColorCode = ColorCode("\x1b[32m");
-    const FG_YELLOW: ColorCode = ColorCode("\x1b[33m");
-    const FG_BLUE: ColorCode = ColorCode("\x1b[34m");
-    const RESET: ColorCode = ColorCode("\x1b[0m");
+#[derive(Default, Debug)]
+pub struct Logger {
+    _private: (),
 }
 
 impl Logger {
-    /// Creates a new Logger instance.
-    /// Note: This logger only outputs in development mode (ENV="development").
-    /// For production logging, please set up your own logging infrastructure.
     pub fn new() -> Self {
-        if !*DEV_MODE {
-            println!("Note: Development logger is disabled in production mode");
-        } else {
-            println!("Development logger enabled, to disable set ENV=production");
-        }
-        return Self {};
+        Lazy::force(&LOGGER_INIT);
+        Self { _private: () }
     }
 
     fn format_status(status: u16) -> Option<String> {
@@ -200,4 +172,35 @@ impl LogLevel {
             LogLevel::Application => "APPLICATION",
         }
     }
+}
+
+impl Display for HttpMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HttpMethod::Get => write!(f, "GET"),
+            HttpMethod::Post => write!(f, "POST"),
+            HttpMethod::Put => write!(f, "PUT"),
+            HttpMethod::Patch => write!(f, "PATCH"),
+            HttpMethod::Delete => write!(f, "DELETE"),
+            HttpMethod::Unsupported => write!(f, "UNSUPPORTED"),
+            HttpMethod::Unknown => write!(f, "UNKNOWN"),
+        }
+    }
+}
+
+struct ColorCode(&'static str);
+
+impl ColorCode {
+    const BG_BLACK: ColorCode = ColorCode("\x1b[40m");
+    const BG_RED: ColorCode = ColorCode("\x1b[41m");
+    const BG_GREEN: ColorCode = ColorCode("\x1b[42m");
+    const BG_YELLOW: ColorCode = ColorCode("\x1b[43m");
+    const BG_BLUE: ColorCode = ColorCode("\x1b[44m");
+    const BG_MAGENTA: ColorCode = ColorCode("\x1b[45m");
+    const BG_CYAN: ColorCode = ColorCode("\x1b[46m");
+    const FG_RED: ColorCode = ColorCode("\x1b[31m");
+    const FG_GREEN: ColorCode = ColorCode("\x1b[32m");
+    const FG_YELLOW: ColorCode = ColorCode("\x1b[33m");
+    const FG_BLUE: ColorCode = ColorCode("\x1b[34m");
+    const RESET: ColorCode = ColorCode("\x1b[0m");
 }
