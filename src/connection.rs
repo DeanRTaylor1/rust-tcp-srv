@@ -40,29 +40,20 @@ impl Connection {
 
     pub async fn process(mut self) -> io::Result<()> {
         if 0 == self.stream.read_buf(&mut self.buffer).await? {
-            println!("Connection closed before data received");
+            self.logger.log(LogLevel::Application, "Connection closed");
             return Ok(());
         }
 
         let first_bytes = self.peek(4);
-        println!("First bytes: {:?}", first_bytes);
 
         match self.detect_protocol(first_bytes) {
             Protocol::Http1 => {
-                self.logger
-                    .log(LogLevel::Debug, "HTTP/1.1 request detected");
-                self.logger.log(
-                    LogLevel::Debug,
-                    format!(
-                        "Raw request: {}",
-                        String::from_utf8_lossy(&self.buffer).as_ref()
-                    )
-                    .as_str(),
-                );
                 self.handle_http().await?;
             }
-            Protocol::Unknown => println!("Unknown protocol"),
-            _ => println!("Unsupported protocol"),
+            Protocol::Unknown => self.logger.log(LogLevel::Application, "Unknown protocol"),
+            _ => self
+                .logger
+                .log(LogLevel::Application, "Unsupported protocol"),
         }
         Ok(())
     }

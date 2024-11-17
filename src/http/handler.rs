@@ -23,18 +23,15 @@ impl Res {
 
 impl HttpHandler {
     pub fn handle(buffer: &[u8]) -> Res {
-        println!("Parsing HTTP request");
         match HttpRequest::parse(buffer) {
             Some(request) => match request.method {
                 HttpMethod::Get if request.path == "/" => {
-                    println!("Sending OK response");
                     return Res::new(
                         ResponseBuilder::ok_response("Hello from Dean's server!"),
                         200,
                     );
                 }
                 _ => {
-                    println!("Sending BAD REQUEST response");
                     return Res::new(
                         ResponseBuilder::bad_request().text("Bad Request").build(),
                         400,
@@ -42,7 +39,6 @@ impl HttpHandler {
                 }
             },
             None => {
-                println!("Failed to parse request");
                 return Res::new(
                     ResponseBuilder::bad_request().text("Bad Request").build(),
                     400,

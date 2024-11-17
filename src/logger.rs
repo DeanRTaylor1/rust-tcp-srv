@@ -17,6 +17,7 @@ pub enum LogLevel {
     Debug,
     Warning,
     Error,
+    Application,
 }
 
 #[derive(Default, Debug)]
@@ -149,17 +150,33 @@ impl Logger {
     }
 
     pub fn log(&self, level: LogLevel, message: &str) {
+        let (bg_color, fg_color, label) = match level {
+            LogLevel::Info => (
+                ColorCode::BG_GREEN,
+                ColorCode::FG_GREEN,
+                format!("{} ", &level.as_str()),
+            ),
+            LogLevel::Debug => (
+                ColorCode::BG_BLUE,
+                ColorCode::FG_BLUE,
+                format!("{}", &level.as_str()),
+            ),
+            LogLevel::Warning => (
+                ColorCode::BG_YELLOW,
+                ColorCode::FG_YELLOW,
+                format!("{} ", &level.as_str()),
+            ),
+            LogLevel::Error => (
+                ColorCode::BG_RED,
+                ColorCode::FG_RED,
+                format!("{}", &level.as_str()),
+            ),
+            LogLevel::Application => return println!("{}", message),
+        };
+
         if !*DEV_MODE {
-            println!("[{}] {}", level.as_str(), message);
             return;
         }
-
-        let (bg_color, fg_color, label) = match level {
-            LogLevel::Info => (ColorCode::BG_GREEN, ColorCode::FG_GREEN, "INFO "),
-            LogLevel::Debug => (ColorCode::BG_BLUE, ColorCode::FG_BLUE, "DEBUG"),
-            LogLevel::Warning => (ColorCode::BG_YELLOW, ColorCode::FG_YELLOW, "WARN "),
-            LogLevel::Error => (ColorCode::BG_RED, ColorCode::FG_RED, "ERROR"),
-        };
 
         println!(
             "{} {} {} {} {} {}",
@@ -180,6 +197,7 @@ impl LogLevel {
             LogLevel::Debug => "DEBUG",
             LogLevel::Warning => "WARN",
             LogLevel::Error => "ERROR",
+            LogLevel::Application => "APPLICATION",
         }
     }
 }

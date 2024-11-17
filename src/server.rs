@@ -1,20 +1,25 @@
-use crate::{config::Config, connection::Connection};
+use crate::{config::Config, connection::Connection, logger::LogLevel, Logger};
 use std::io;
 use tokio::net::TcpListener;
 
 pub struct Server {
     config: Config,
+    logger: Logger,
 }
 
 impl Server {
     pub fn new(config: Config) -> Self {
-        Self { config }
+        let logger = Logger::new();
+        Self { config, logger }
     }
 
     pub async fn run(&self) -> io::Result<()> {
         let addr = format!("{}:{}", self.config.host, self.config.port);
         let listener = TcpListener::bind(&addr).await?;
-        println!("Listening on {}", addr);
+        self.logger.log(
+            LogLevel::Info,
+            &format!("Server is listening on Port: {}", self.config.port),
+        );
 
         loop {
             let (socket, addr) = listener.accept().await?;
