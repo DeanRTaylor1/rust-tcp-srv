@@ -1,4 +1,8 @@
+mod http;
+
+use http::HttpHandler;
 use kqueue::{Event, EventFilter, FilterFlag, Ident, Watcher};
+
 use std::{
     io::{self, Read, Write},
     net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
@@ -26,6 +30,16 @@ pub const HOST: &str = "127.0.0.1";
 pub const MAX_EVENTS: usize = 10;
 
 impl ServerContext {
+    /// Initializes a new `ServerContext` with a bound and non-blocking `TcpListener`, a
+    /// `Watcher` for monitoring file descriptors, and an empty buffer for storing events.
+    ///
+    /// The `TcpListener` is registered with the `Watcher` using the `NOTE_FFNOP` flag for
+    /// basic monitoring of new connections.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the `TcpListener` cannot be bound to the
+    /// specified address, or if the `Watcher` cannot be initialized.
     fn init() -> io::Result<ServerContext> {
         let watcher = Watcher::new()?;
         let listener = TcpListener::bind(format!("{HOST}:{PORT}"))?;
@@ -67,6 +81,22 @@ impl ServerContext {
         Ok(())
     }
 
+    /// Handles data received from a connected client.
+    ///
+    /// This function will read all available data from the client, and store it in the
+    /// provided buffer. If the client closes the connection, the function will return
+    /// an error. If the client sends an incomplete HTTP request, the function will
+    /// return an error.
+    ///
+    /// # Arguments
+    ///
+    /// * `client_fd` - The file descriptor of the client connection.
+    /// * `buffer` - A mutable buffer to store the received data.
+    ///
+    /// # Returns
+    ///
+    /// Returns an error if the client connection is closed, or if the client sends
+    /// an incomplete HTTP request.
     fn handle_client_data(client_fd: RawFd, buffer: &mut Vec<u8>) -> io::Result<()> {
         let mut stream = unsafe { TcpStream::from_raw_fd(client_fd) };
         let mut temp_buf = [0u8; 1024];
@@ -85,9 +115,10 @@ impl ServerContext {
                     println!("Received data: {}", str_data);
                 }
 
+                // Check if the received data contains a complete HTTP request
                 if let Some(pos) = find_header_end(buffer) {
                     println!("Found complete HTTP request");
-                    let response = http_handler(&buffer[..pos]);
+                    let response = HttpHandler::handle(&buffer[..pos]);
                     println!("Sending response");
                     stream.write_all(&response)?;
                     buffer.clear();
@@ -113,16 +144,25 @@ impl ServerContext {
         }
     }
 
+    /// Runs the server loop.
+    ///
+    /// This function will continuously poll the watcher for events, and handle
+    /// them accordingly. If a new connection is detected, it will be accepted
+    /// and registered with the watcher. If data is available on an existing
+    /// connection, it will be read and processed. If the connection is closed
+    /// by the client, it will be removed from the watcher.
     pub fn run(&mut self) -> io::Result<()> {
         let mut buffer = Vec::with_capacity(MAX_REQUEST_SIZE);
         println!("Server listening on {}:{}", HOST, PORT);
 
         loop {
+            // Poll the watcher for events with a 100ms timeout
             let events = self.watcher.poll(Some(Duration::from_millis(100)));
             match events {
                 Some(event) => {
                     println!("Received event: {:?}", event);
                     match event.ident {
+                        // Handle new connection
                         Ident::Fd(fd) => {
                             if fd == self.listener.as_raw_fd() {
                                 match self.handle_new_connection() {
@@ -130,12 +170,14 @@ impl ServerContext {
                                     Err(e) => println!("Error handling connection: {}", e),
                                 }
                             } else {
+                                // Handle data available on an existing connection
                                 match Self::handle_client_data(fd, &mut buffer) {
                                     Ok(_) => println!("Successfully handled client data"),
                                     Err(e) => println!("Error handling client data: {}", e),
                                 }
                             }
                         }
+                        // Ignore non-fd events
                         _ => println!("Received non-fd event: {:?}", event),
                     }
                 }
@@ -153,57 +195,4 @@ fn find_header_end(buffer: &[u8]) -> Option<usize> {
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
         .map(|pos| pos + 4)
-}
-
-#[derive(Debug)]
-enum HttpMethod {
-    Get,
-    Unsupported,
-}
-
-struct HttpRequest {
-    method: HttpMethod,
-    path: String,
-}
-
-fn parse_http_request(buffer: &[u8]) -> Option<HttpRequest> {
-    let request = std::str::from_utf8(buffer).ok()?;
-    let mut lines = request.lines();
-    let first_line = lines.next()?;
-    let mut parts = first_line.split_whitespace();
-
-    let method = match parts.next()? {
-        "GET" => HttpMethod::Get,
-        _ => HttpMethod::Unsupported,
-    };
-
-    let path = parts.next()?.to_string();
-    println!("Method: {:?}, Path: {}", method, path);
-
-    Some(HttpRequest { method, path })
-}
-
-// Update http_handler for more verbose response
-fn http_handler(buffer: &[u8]) -> Vec<u8> {
-    const BAD_REQUEST: &str = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nInvalid format";
-    const OK_RESPONSE: &str =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 11\r\n\r\nHello World!";
-
-    println!("Parsing HTTP request");
-    match parse_http_request(buffer) {
-        Some(request) => match request.method {
-            HttpMethod::Get if request.path == "/" => {
-                println!("Sending OK response");
-                OK_RESPONSE.as_bytes().to_vec()
-            }
-            _ => {
-                println!("Sending BAD REQUEST response");
-                BAD_REQUEST.as_bytes().to_vec()
-            }
-        },
-        None => {
-            println!("Failed to parse request");
-            BAD_REQUEST.as_bytes().to_vec()
-        }
-    }
 }
