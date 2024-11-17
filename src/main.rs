@@ -1,198 +1,104 @@
 mod http;
-
 use http::HttpHandler;
-use kqueue::{Event, EventFilter, FilterFlag, Ident, Watcher};
 
-use std::{
-    io::{self, Read, Write},
-    net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
-    os::fd::{AsRawFd, FromRawFd, RawFd},
-    time::Duration,
+use bytes::BytesMut;
+use std::io;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt, BufWriter},
+    net::{TcpListener, TcpStream},
 };
-
-pub const MAX_REQUEST_SIZE: usize = 1024;
-
-fn main() -> io::Result<()> {
-    let mut server = ServerContext::init()?;
-    println!("Server initialized, starting run loop...");
-    server.run()
-}
-
-pub struct ServerContext {
-    pub watcher: Watcher,
-    pub listener: TcpListener,
-    pub address: SocketAddrV4,
-    pub events: Vec<Event>,
-}
 
 pub const PORT: u16 = 8080;
 pub const HOST: &str = "127.0.0.1";
 pub const MAX_EVENTS: usize = 10;
 
-impl ServerContext {
-    /// Initializes a new `ServerContext` with a bound and non-blocking `TcpListener`, a
-    /// `Watcher` for monitoring file descriptors, and an empty buffer for storing events.
-    ///
-    /// The `TcpListener` is registered with the `Watcher` using the `NOTE_FFNOP` flag for
-    /// basic monitoring of new connections.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the `TcpListener` cannot be bound to the
-    /// specified address, or if the `Watcher` cannot be initialized.
-    fn init() -> io::Result<ServerContext> {
-        let watcher = Watcher::new()?;
-        let listener = TcpListener::bind(format!("{HOST}:{PORT}"))?;
-        listener.set_nonblocking(true)?;
+pub const MAX_REQUEST_SIZE: usize = 1024 * 1024;
 
-        let address = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, PORT);
-        let events = Vec::with_capacity(MAX_EVENTS);
+#[derive(Debug)]
+pub enum Protocol {
+    Http1,
+    WebSocket,
+    Http2,
+    Unknown,
+}
 
-        let mut ctx = ServerContext {
-            watcher,
-            listener,
-            address,
-            events,
-        };
-
-        // Using NOTE_FFNOP as per kqueue docs for basic monitoring
-        ctx.watcher.add_fd(
-            ctx.listener.as_raw_fd(),
-            EventFilter::EVFILT_READ,
-            FilterFlag::NOTE_FFNOP,
-        )?;
-        ctx.watcher.watch()?;
-
-        println!("Registered listener with watcher");
-        Ok(ctx)
-    }
-
-    fn handle_new_connection(&mut self) -> io::Result<()> {
-        let (stream, addr) = self.listener.accept()?;
-        println!("New connection from: {}", addr);
-        stream.set_nonblocking(true)?;
-
-        let fd = stream.as_raw_fd();
-        self.watcher
-            .add_fd(fd, EventFilter::EVFILT_READ, FilterFlag::NOTE_FFNOP)?;
-        self.watcher.watch()?;
-
-        std::mem::forget(stream);
-        Ok(())
-    }
-
-    /// Handles data received from a connected client.
-    ///
-    /// This function will read all available data from the client, and store it in the
-    /// provided buffer. If the client closes the connection, the function will return
-    /// an error. If the client sends an incomplete HTTP request, the function will
-    /// return an error.
-    ///
-    /// # Arguments
-    ///
-    /// * `client_fd` - The file descriptor of the client connection.
-    /// * `buffer` - A mutable buffer to store the received data.
-    ///
-    /// # Returns
-    ///
-    /// Returns an error if the client connection is closed, or if the client sends
-    /// an incomplete HTTP request.
-    fn handle_client_data(client_fd: RawFd, buffer: &mut Vec<u8>) -> io::Result<()> {
-        let mut stream = unsafe { TcpStream::from_raw_fd(client_fd) };
-        let mut temp_buf = [0u8; 1024];
-
-        match stream.read(&mut temp_buf) {
-            Ok(0) => {
-                println!("Connection closed by client");
-                Ok(())
-            }
-            Ok(n) => {
-                println!("Read {} bytes from client", n);
-                buffer.extend_from_slice(&temp_buf[..n]);
-
-                // Print received data for debugging
-                if let Ok(str_data) = String::from_utf8(temp_buf[..n].to_vec()) {
-                    println!("Received data: {}", str_data);
-                }
-
-                // Check if the received data contains a complete HTTP request
-                if let Some(pos) = find_header_end(buffer) {
-                    println!("Found complete HTTP request");
-                    let response = HttpHandler::handle(&buffer[..pos]);
-                    println!("Sending response");
-                    stream.write_all(&response)?;
-                    buffer.clear();
-                } else {
-                    println!("Incomplete HTTP request");
-                }
-                std::mem::forget(stream);
-                Ok(())
-            }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                println!("Would block, trying again later");
-                std::mem::forget(stream);
-                Ok(())
-            }
-            Err(e) if e.kind() == io::ErrorKind::ConnectionReset => {
-                println!("Connection reset by peer");
-                Ok(())
-            }
-            Err(e) => {
-                println!("Error reading from stream: {}", e);
-                Err(e)
-            }
-        }
-    }
-
-    /// Runs the server loop.
-    ///
-    /// This function will continuously poll the watcher for events, and handle
-    /// them accordingly. If a new connection is detected, it will be accepted
-    /// and registered with the watcher. If data is available on an existing
-    /// connection, it will be read and processed. If the connection is closed
-    /// by the client, it will be removed from the watcher.
-    pub fn run(&mut self) -> io::Result<()> {
-        let mut buffer = Vec::with_capacity(MAX_REQUEST_SIZE);
-        println!("Server listening on {}:{}", HOST, PORT);
-
-        loop {
-            // Poll the watcher for events with a 100ms timeout
-            let events = self.watcher.poll(Some(Duration::from_millis(100)));
-            match events {
-                Some(event) => {
-                    println!("Received event: {:?}", event);
-                    match event.ident {
-                        // Handle new connection
-                        Ident::Fd(fd) => {
-                            if fd == self.listener.as_raw_fd() {
-                                match self.handle_new_connection() {
-                                    Ok(_) => println!("Successfully handled new connection"),
-                                    Err(e) => println!("Error handling connection: {}", e),
-                                }
-                            } else {
-                                // Handle data available on an existing connection
-                                match Self::handle_client_data(fd, &mut buffer) {
-                                    Ok(_) => println!("Successfully handled client data"),
-                                    Err(e) => println!("Error handling client data: {}", e),
-                                }
-                            }
-                        }
-                        // Ignore non-fd events
-                        _ => println!("Received non-fd event: {:?}", event),
-                    }
-                }
-                None => {
-                    // Timeout occurred, continue polling
-                    continue;
-                }
-            }
-        }
+#[tokio::main]
+async fn main() -> io::Result<()> {
+    let listener = TcpListener::bind(format!("{HOST}:{PORT}")).await?;
+    println!("Listening on {}:{}", HOST, PORT);
+    loop {
+        let (socket, addr) = listener.accept().await?;
+        println!("New connection from {}", addr);
+        process(socket).await?;
     }
 }
 
-fn find_header_end(buffer: &[u8]) -> Option<usize> {
-    buffer
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .map(|pos| pos + 4)
+async fn process(socket: TcpStream) -> io::Result<()> {
+    let mut conn = Connection::new(socket)?;
+    conn.read_data().await
+}
+
+#[derive(Debug)]
+pub struct Connection {
+    stream: BufWriter<TcpStream>,
+
+    buffer: BytesMut,
+}
+
+impl Connection {
+    pub fn new(stream: TcpStream) -> Result<Self, io::Error> {
+        let stream = BufWriter::new(stream);
+        let buffer = BytesMut::with_capacity(MAX_REQUEST_SIZE);
+        Ok(Self { stream, buffer })
+    }
+
+    pub async fn read_data(&mut self) -> io::Result<()> {
+        // First read to get protocol
+        if 0 == self.stream.read_buf(&mut self.buffer).await? {
+            println!("Connection closed before data received");
+            return Ok(());
+        }
+
+        let first_bytes = &self.buffer[..std::cmp::min(4, self.buffer.len())];
+        println!("First bytes: {:?}", first_bytes);
+
+        match self.detect_protocol().await? {
+            Protocol::Http1 => {
+                println!("HTTP/1.1 request detected");
+                println!("Raw request: {}", String::from_utf8_lossy(&self.buffer));
+
+                let response = HttpHandler::handle(&self.buffer);
+                println!("Sending response: {:?}", String::from_utf8_lossy(&response));
+
+                self.stream.write_all(&response).await?;
+                self.stream.flush().await?;
+                self.buffer.clear();
+            }
+            Protocol::Unknown => println!("Unknown protocol"),
+            _ => println!("Unsupported protocol"),
+        }
+        Ok(())
+    }
+
+    async fn detect_protocol(&mut self) -> io::Result<Protocol> {
+        let bytes = self.peek(4).await?;
+
+        match bytes {
+            b"GET " => Ok(Protocol::Http1),
+            b"POST" => Ok(Protocol::Http1),
+            b"PUT " => Ok(Protocol::Http1),
+            b"HEAD" => Ok(Protocol::Http1),
+            b"PRI " => Ok(Protocol::Http2),
+            _ => Ok(Protocol::Unknown),
+        }
+    }
+
+    async fn peek(&mut self, n: usize) -> io::Result<&[u8]> {
+        // Ensure we have enough data
+        if self.buffer.len() < n {
+            self.stream.read_buf(&mut self.buffer).await?;
+        }
+
+        Ok(&self.buffer[..std::cmp::min(n, self.buffer.len())])
+    }
 }
