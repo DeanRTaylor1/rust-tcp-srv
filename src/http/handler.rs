@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::{routes::Route, HttpMethod, HttpRequest, ResponseBuilder, RouteManager};
 
 pub struct RequestResponse {
@@ -37,12 +39,12 @@ impl HttpHandler {
         }
     }
 
-    pub fn get(&mut self, path: &str, handler: fn(&HttpRequest) -> Vec<u8>) {
+    pub fn get(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) {
         self.routes
             .add_route(Route::new(path, HttpMethod::Get, handler));
     }
 
-    pub fn post(&mut self, path: &str, handler: fn(&HttpRequest) -> Vec<u8>) {
+    pub fn post(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) {
         self.routes
             .add_route(Route::new(path, HttpMethod::Post, handler));
     }
@@ -51,7 +53,9 @@ impl HttpHandler {
         match HttpRequest::parse(buffer) {
             Some(request) => {
                 if let Some(route) = self.routes.find_route(&request.path, request.method) {
-                    Res::new((route.handler)(&request), 200)
+                    let params = self.extract_params(&route.pattern, &request.path);
+                    let context = Context { request, params };
+                    Res::new((route.handler)(&context), 200)
                 } else {
                     Res::new(ResponseBuilder::not_found().text("Not Found").build(), 404)
                 }
@@ -61,5 +65,29 @@ impl HttpHandler {
                 400,
             ),
         }
+    }
+
+    fn extract_params(&self, pattern: &str, path: &str) -> HashMap<String, String> {
+        let mut params = HashMap::new();
+        let pattern_parts: Vec<_> = pattern.split('/').collect();
+        let path_parts: Vec<_> = path.split('/').collect();
+
+        for (p, path_part) in pattern_parts.iter().zip(path_parts.iter()) {
+            if p.starts_with(':') {
+                params.insert(p[1..].to_string(), path_part.to_string());
+            }
+        }
+        params
+    }
+}
+
+pub struct Context {
+    pub request: HttpRequest,
+    params: HashMap<String, String>,
+}
+
+impl Context {
+    pub fn param(&self, key: &str) -> Option<&str> {
+        self.params.get(key).map(|s| s.as_str())
     }
 }

@@ -32,7 +32,13 @@ pub struct HttpRequest {
     pub path: String,
     pub headers: HashMap<String, String>,
     pub body: Vec<u8>,
+    pub query_params: Params,
+    pub path_params: Params,
+    pub cookies: Cookies,
 }
+
+type Cookies = HashMap<String, String>;
+type Params = HashMap<String, String>;
 
 impl HttpRequest {
     pub fn new(
@@ -40,15 +46,39 @@ impl HttpRequest {
         path: String,
         headers: HashMap<String, String>,
         body: Vec<u8>,
+        query_params: Params,
+        path_params: Params,
+        cookies: Cookies,
     ) -> Self {
         Self {
             method,
             path,
             headers,
             body,
+            query_params,
+            path_params,
+            cookies,
         }
     }
 
+    /** Public interface */
+
+    pub fn content_type(&self) -> Option<&str> {
+        self.headers.get("content-type").map(|s| s.as_str())
+    }
+
+    pub fn content_length(&self) -> Option<usize> {
+        self.headers.get("content-length")?.parse().ok()
+    }
+
+    pub fn json_body<T: serde::de::DeserializeOwned>(&self) -> Option<T> {
+        if self.content_type()? != "application/json" {
+            return None;
+        }
+        serde_json::from_slice(&self.body).ok()
+    }
+
+    /** Static interface */
     pub fn parse(buffer: &[u8]) -> Option<HttpRequest> {
         let request = std::str::from_utf8(buffer).ok()?;
         let mut parts = request.split("\r\n\r\n");
@@ -69,27 +99,60 @@ impl HttpRequest {
             }
         }
 
+        let cookies = match headers.get("cookie") {
+            Some(cookie_str) => HttpRequest::parse_cookies(cookie_str.as_str()),
+            None => HashMap::new(),
+        };
+
         let body = body_part.as_bytes().to_vec();
+
+        let query_params = HttpRequest::parse_query_params(&path.as_str());
+        let path_params = HttpRequest::parse_path_params(&path.as_str(), &path);
+
         Some(HttpRequest {
             method,
             path,
             headers,
             body,
+            query_params,
+            path_params,
+            cookies,
         })
     }
 
-    pub fn content_type(&self) -> Option<&str> {
-        self.headers.get("content-type").map(|s| s.as_str())
-    }
+    /** Private interface */
+    fn parse_path_params(path: &str, pattern: &str) -> HashMap<String, String> {
+        let mut params = HashMap::new();
+        let path_parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+        let pattern_parts: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
 
-    pub fn content_length(&self) -> Option<usize> {
-        self.headers.get("content-length")?.parse().ok()
-    }
-
-    pub fn json_body<T: serde::de::DeserializeOwned>(&self) -> Option<T> {
-        if self.content_type()? != "application/json" {
-            return None;
+        for (pattern, value) in pattern_parts.iter().zip(path_parts.iter()) {
+            if pattern.starts_with(':') {
+                params.insert(pattern[1..].to_string(), value.to_string());
+            }
         }
-        serde_json::from_slice(&self.body).ok()
+        params
+    }
+
+    fn parse_cookies(cookie: &str) -> Cookies {
+        let mut cookies = HashMap::new();
+        for pair in cookie.split(';') {
+            if let Some((key, value)) = pair.split_once('=') {
+                cookies.insert(key.trim().to_string(), value.trim().to_string());
+            }
+        }
+        cookies
+    }
+
+    fn parse_query_params(path: &str) -> HashMap<String, String> {
+        let mut params = HashMap::new();
+        if let Some(query) = path.split_once('?').map(|(_, q)| q) {
+            for pair in query.split('&') {
+                if let Some((key, value)) = pair.split_once('=') {
+                    params.insert(key.trim().to_string(), value.trim().to_string());
+                }
+            }
+        }
+        params
     }
 }

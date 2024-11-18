@@ -1,4 +1,4 @@
-use crate::http::{HttpHandler, HttpMethod, RequestResponse, ResponseBuilder};
+use crate::http::{Context, HttpHandler, HttpMethod, RequestResponse, ResponseBuilder};
 use crate::logger::{LogLevel, Logger};
 
 use bytes::BytesMut;
@@ -42,12 +42,11 @@ impl Connection {
         let mut http_handler = HttpHandler::new();
 
         // TODO: Move this somewhere else/public APi
-        http_handler.get("/", |_req| {
-            ResponseBuilder::ok_response("Hello from Dean's server!")
-        });
+        http_handler.get("/", root_handler);
+        http_handler.get("/user/:id", user_handler);
 
-        http_handler.post("/", |req| {
-            match req.json_body::<JsonData>() {
+        http_handler.post("/", |ctx| {
+            match ctx.request.json_body::<JsonData>() {
                 Some(body) => {
                     println!("JSON body: {}", body.message);
                 }
@@ -137,4 +136,14 @@ impl Connection {
             _ => Protocol::Unknown,
         }
     }
+}
+
+fn root_handler(_ctx: &Context) -> Vec<u8> {
+    ResponseBuilder::ok_response("Hello from Dean's server!")
+}
+
+fn user_handler(ctx: &Context) -> Vec<u8> {
+    let user_id = ctx.param("id").unwrap_or("0");
+    Logger::new().log(LogLevel::Debug, &format!("User ID: {}", user_id));
+    ResponseBuilder::ok().text(format!("{}", user_id)).build()
 }
