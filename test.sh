@@ -14,26 +14,30 @@ test_request() {
     local endpoint=$2
     local expected_status=$3
     local data=$4
-    local description=$5
+    local cookies=$5
+    local description=$6
 
     test_count=$((test_count + 1))
     echo -e "\n🔍 Testing: ${description}"
 
-    local response
-    local http_status
+    local headers=""
+
+    if [ -n "$cookies" ]; then
+        headers="$headers --cookie '$cookies'"
+    fi
 
     if [ -n "$data" ]; then
-        response=$(curl -s -w "\n%{http_code}" -X $method \
+        response=$(curl -i -s ${headers} -X $method \
             -H "Content-Type: application/json" \
             -d "$data" \
             "http://$HOST:$PORT$endpoint")
     else
-        response=$(curl -s -w "\n%{http_code}" -X $method \
+        response=$(curl -i -s ${headers} -X $method \
             "http://$HOST:$PORT$endpoint")
     fi
 
-    http_status=$(echo "$response" | tail -n1)
-    body=$(echo "$response" | sed '$d')
+    http_status=$(echo "$response" | grep "HTTP/" | awk '{print $2}')
+    body=$(echo "$response" | awk 'BEGIN{RS="\r\n\r\n";ORS=""}NR==2{print}')
 
     if [ "$http_status" -eq "$expected_status" ]; then
         echo -e "${GREEN}✓ PASS${NC} - Status: $http_status"
@@ -69,6 +73,9 @@ test_request "POST" "/" 400 'invalid-json' "POST request with invalid JSON"
 
 # Test CORS preflight
 test_request "OPTIONS" "/" 200 "" "OPTIONS request for CORS"
+
+test_request "GET" "/cookies" 200 "" "session=abc123" "Test reading cookies"
+test_request "GET" "/cookies" 200 "" "session=abc123; user=dean" "Test multiple cookies"
 
 echo -e "\n📊 Test Summary"
 echo "================="

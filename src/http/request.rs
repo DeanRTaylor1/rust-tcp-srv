@@ -63,6 +63,10 @@ impl HttpRequest {
 
     /** Public interface */
 
+    pub fn cookies(&self) -> &Cookies {
+        &self.cookies
+    }
+
     pub fn content_type(&self) -> Option<&str> {
         self.headers.get("content-type").map(|s| s.as_str())
     }

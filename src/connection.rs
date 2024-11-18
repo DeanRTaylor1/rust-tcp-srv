@@ -45,6 +45,13 @@ impl Connection {
         http_handler.get("/", root_handler);
         http_handler.get("/user/:id", user_handler);
 
+        http_handler.get("/cookies", |ctx| {
+            let cookies = ctx.request.cookies();
+            ResponseBuilder::ok()
+                .json(serde_json::to_string(&cookies).unwrap())
+                .build()
+        });
+
         http_handler.post("/", |ctx| {
             match ctx.request.json_body::<JsonData>() {
                 Some(body) => {
