@@ -1,6 +1,6 @@
 use super::{handler::Context, HttpMethod};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RouteManager {
     routes: Vec<Route>,
 }
@@ -10,9 +10,42 @@ impl RouteManager {
         Self { routes: vec![] }
     }
 
-    pub fn add_route(&mut self, route: Route) {
-        self.routes.push(route);
+    pub fn routes(&self) -> &Vec<Route> {
+        &self.routes
     }
+
+    pub fn get(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) -> &mut Self {
+        self.add_route(Route::new(path, HttpMethod::Get, handler));
+        self
+    }
+
+    pub fn post(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) -> &mut Self {
+        self.add_route(Route::new(path, HttpMethod::Post, handler));
+        self
+    }
+
+    pub fn put(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) -> &mut Self {
+        self.add_route(Route::new(path, HttpMethod::Put, handler));
+        self
+    }
+
+    pub fn delete(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) -> &mut Self {
+        self.add_route(Route::new(path, HttpMethod::Delete, handler));
+        self
+    }
+
+    pub fn apply_routes(&mut self, router: RouteManager) -> &mut Self {
+        for route in router.routes() {
+            self.add_route(route.clone());
+        }
+        self
+    }
+
+    fn add_route(&mut self, route: Route) -> &mut Self {
+        self.routes.push(route);
+        self
+    }
+
     pub fn find_route(&self, path: &str, method: HttpMethod) -> Option<&Route> {
         self.routes
             .iter()

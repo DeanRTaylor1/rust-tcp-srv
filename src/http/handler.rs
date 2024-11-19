@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{routes::Route, HttpMethod, HttpRequest, ResponseBuilder, RouteManager};
+use super::{HttpMethod, HttpRequest, ResponseBuilder, RouteManager};
 
 pub struct RequestResponse {
     pub method: HttpMethod,
@@ -26,37 +26,13 @@ impl Res {
     }
 }
 
-impl Default for HttpHandler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl HttpHandler {
-    pub fn new() -> Self {
-        Self {
-            routes: RouteManager::new(),
-        }
+    pub fn new(router: RouteManager) -> Self {
+        Self { routes: router }
     }
 
-    pub fn get(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) {
-        self.routes
-            .add_route(Route::new(path, HttpMethod::Get, handler));
-    }
-
-    pub fn post(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) {
-        self.routes
-            .add_route(Route::new(path, HttpMethod::Post, handler));
-    }
-
-    pub fn put(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) {
-        self.routes
-            .add_route(Route::new(path, HttpMethod::Put, handler));
-    }
-
-    pub fn delete(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) {
-        self.routes
-            .add_route(Route::new(path, HttpMethod::Delete, handler));
+    pub fn apply_routes(&mut self, router: RouteManager) {
+        self.routes.apply_routes(router);
     }
 
     pub fn handle(&self, buffer: &[u8]) -> Res {
