@@ -1,31 +1,48 @@
-use crate::{config::Config, connection::Connection, http::RouteManager, logger::LogLevel, Logger};
-use std::io;
+use crate::{
+    config::Config,
+    connection::Connection,
+    http::{HttpHandler, RouteManager},
+    logger::LogLevel,
+    Logger,
+};
+use std::{io, sync::Arc};
 use tokio::net::TcpListener;
 
 pub struct Server {
     config: Config,
     logger: Logger,
     pub router: RouteManager,
+    shared_router: Option<Arc<RouteManager>>,
+    http_handler: Option<Arc<HttpHandler>>,
 }
 
 impl Server {
     pub fn new(config: Config) -> Self {
-        let logger = Logger::new();
-        let router = RouteManager::new();
         Self {
             config,
-            logger,
-            router,
+            logger: Logger::new(),
+            router: RouteManager::new(),
+            shared_router: None,
+            http_handler: None,
         }
     }
 
-    pub async fn run(&self) -> io::Result<()> {
+    pub async fn run(&mut self) -> io::Result<()> {
         if self.router.routes().len() == 0 {
             self.logger.log(
                 LogLevel::Application,
                 "No routes have been registered, you can register routes by calling the `get`, `post`, `put` and `delete` methods on the route manager.",
             )
         }
+
+        self.shared_router = Some(Arc::new(std::mem::replace(
+            &mut self.router,
+            RouteManager::new(),
+        )));
+
+        self.http_handler = Some(Arc::new(HttpHandler::new(
+            self.shared_router.as_ref().unwrap().clone(),
+        )));
 
         let addr = format!("{}:{}", self.config.host, self.config.port);
         let listener = TcpListener::bind(&addr).await?;
@@ -35,13 +52,10 @@ impl Server {
         );
 
         loop {
-            let (socket, addr) = listener.accept().await?;
-            println!("New connection from {}", addr);
-
-            let router = self.router.clone();
-
+            let (socket, _addr) = listener.accept().await?;
+            let handler = Arc::clone(self.http_handler.as_ref().unwrap());
             tokio::spawn(async move {
-                if let Err(e) = Connection::new(socket, router).unwrap().process().await {
+                if let Err(e) = Connection::new(socket, handler).unwrap().process().await {
                     eprintln!("Connection error: {}", e);
                 }
             });

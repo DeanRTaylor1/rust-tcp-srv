@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use super::{HttpMethod, HttpRequest, ResponseBuilder, RouteManager};
 
@@ -12,7 +12,7 @@ pub struct RequestResponse {
 
 #[derive(Debug)]
 pub struct HttpHandler {
-    routes: RouteManager,
+    routes: Arc<RouteManager>,
 }
 
 pub struct Res {
@@ -27,12 +27,8 @@ impl Res {
 }
 
 impl HttpHandler {
-    pub fn new(router: RouteManager) -> Self {
+    pub fn new(router: Arc<RouteManager>) -> Self {
         Self { routes: router }
-    }
-
-    pub fn apply_routes(&mut self, router: RouteManager) {
-        self.routes.apply_routes(router);
     }
 
     pub fn handle(&self, buffer: &[u8]) -> Res {

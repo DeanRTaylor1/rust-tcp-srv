@@ -58,12 +58,25 @@ fn delete_handler(ctx: &Context) -> Vec<u8> {
 }
 
 fn routes(server: &mut Server) {
+    let mut api = server.router.group("/api");
+
+    let mut data = api.group("/data");
+
+    data.put("/:id", put_handler).delete("/:id", delete_handler);
+
+    let mut user_group = api.group("/user");
+
+    user_group
+        .get("/:id", user_handler)
+        .post("/", post_handler)
+        .delete("/:id", delete_handler);
+
     server
         .router
         .get("/", root_handler)
         .get("/user/:id", user_handler)
         .get("/cookies", cookies_handler)
         .post("/", post_handler)
-        .put("/api/data/:id", put_handler)
-        .delete("/api/data/:id", delete_handler);
+        .add_group(data)
+        .add_group(user_group);
 }

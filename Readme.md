@@ -25,9 +25,9 @@ A low-level HTTP framework focused on learning and understanding web server impl
 
 - [x] Basic routing
 - [x] Method-based handlers (GET, POST, etc.)
-- [ ] Path parameters
-- [ ] Query string parsing
-- [ ] Route groups/namespacing
+- [x] Path parameters
+- [x] Query string parsing
+- [x] Route groups/namespacing
 - [ ] Middleware support
 - [ ] Static file serving
 - [ ] Request body parsing

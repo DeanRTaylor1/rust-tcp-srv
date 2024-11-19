@@ -1,9 +1,10 @@
-use crate::http::{HttpHandler, HttpMethod, RequestResponse, RouteManager};
+use crate::http::{HttpHandler, HttpMethod, RequestResponse};
 use crate::logger::{LogLevel, Logger};
 
 use bytes::BytesMut;
 use std::io;
 use std::str::FromStr;
+use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufWriter},
     net::TcpStream,
@@ -25,15 +26,14 @@ pub struct Connection {
 
     logger: Logger,
 
-    http_handler: HttpHandler,
+    http_handler: Arc<HttpHandler>,
 }
 
 impl Connection {
-    pub fn new(stream: TcpStream, router: RouteManager) -> Result<Self, io::Error> {
+    pub fn new(stream: TcpStream, http_handler: Arc<HttpHandler>) -> Result<Self, io::Error> {
         let stream = BufWriter::new(stream);
         let buffer = BytesMut::with_capacity(1024 * 1024);
         let logger = Logger::new();
-        let http_handler = HttpHandler::new(router);
 
         Ok(Self {
             stream,

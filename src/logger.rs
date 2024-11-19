@@ -28,7 +28,7 @@ static LOGGER_INIT: Lazy<()> = Lazy::new(|| {
     }
 });
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Logger {
     _private: (),
 }
