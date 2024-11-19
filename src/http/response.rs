@@ -8,6 +8,10 @@ pub struct ResponseBuilder {
 impl ResponseBuilder {
     // Status code constants
     pub const OK: (u16, &'static str) = (200, "OK");
+    pub const CREATED: (u16, &'static str) = (201, "Created");
+    pub const UPDATED: (u16, &'static str) = (200, "Success");
+    pub const NO_CONTENT: (u16, &'static str) = (204, "No Content");
+    pub const DELETED: (u16, &'static str) = (200, "Success");
     pub const NOT_FOUND: (u16, &'static str) = (404, "Not Found");
     pub const BAD_REQUEST: (u16, &'static str) = (400, "Bad Request");
     pub const INTERNAL_SERVER_ERROR: (u16, &'static str) = (500, "Internal Server Error");
@@ -86,6 +90,10 @@ impl ResponseBuilder {
         Self::new().status(Self::OK).text(message).build()
     }
 
+    pub fn created_response(message: impl AsRef<str>) -> Vec<u8> {
+        Self::new().status(Self::CREATED).text(message).build()
+    }
+
     pub fn not_found_response(message: impl AsRef<str>) -> Vec<u8> {
         Self::new().status(Self::NOT_FOUND).text(message).build()
     }
@@ -128,6 +136,14 @@ impl ResponseBuilder {
 impl ResponseBuilder {
     pub fn ok() -> Self {
         Self::new().status(Self::OK)
+    }
+
+    pub fn deleted() -> Self {
+        Self::new().status(Self::DELETED)
+    }
+
+    pub fn created() -> Self {
+        Self::new().status(Self::CREATED)
     }
 
     pub fn not_found() -> Self {

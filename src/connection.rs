@@ -61,7 +61,21 @@ impl Connection {
                     return ResponseBuilder::bad_request().text("Bad Request").build();
                 }
             }
-            return ResponseBuilder::ok_response("Hello from Dean's server!");
+            return ResponseBuilder::created_response("Hello from Dean's server!");
+        });
+
+        http_handler.put("/api/data/:id", |ctx| {
+            let id = ctx.param("id").unwrap_or("0");
+            ResponseBuilder::created()
+                .text(format!("Updated data for ID: {}", id))
+                .build()
+        });
+
+        http_handler.delete("/api/data/:id", |ctx| {
+            let id = ctx.param("id").unwrap_or("0");
+            ResponseBuilder::deleted()
+                .text(format!("Deleted data for ID: {}", id))
+                .build()
         });
 
         Ok(Self {
@@ -78,16 +92,24 @@ impl Connection {
             return Ok(());
         }
 
-        let first_bytes = self.peek(4);
+        let first_bytes = self.peek(7);
 
         match self.detect_protocol(first_bytes) {
             Protocol::Http1 => {
                 self.handle_http().await?;
             }
-            Protocol::Unknown => self.logger.log(LogLevel::Application, "Unknown protocol"),
-            _ => self
-                .logger
-                .log(LogLevel::Application, "Unsupported protocol"),
+            Protocol::Unknown => self.logger.log(
+                LogLevel::Application,
+                format!(
+                    "Unknown protocol: '{}'",
+                    String::from_utf8_lossy(first_bytes)
+                )
+                .as_str(),
+            ),
+            _ => self.logger.log(
+                LogLevel::Application,
+                format!("Unsupported protocol: {:?}", first_bytes).as_str(),
+            ),
         }
         Ok(())
     }
@@ -134,13 +156,15 @@ impl Connection {
             return Protocol::Unknown;
         }
 
-        match bytes {
-            b"GET " => Protocol::Http1,
-            b"POST" => Protocol::Http1,
-            b"PUT " => Protocol::Http1,
-            b"HEAD" => Protocol::Http1,
-            b"PRI " => Protocol::Http2,
-            _ => Protocol::Unknown,
+        if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
+            let method = &bytes[..space_pos];
+            match method {
+                b"GET" | b"POST" | b"PUT" | b"HEAD" | b"DELETE" | b"PATCH" => Protocol::Http1,
+                b"PRI" => Protocol::Http2,
+                _ => Protocol::Unknown,
+            }
+        } else {
+            Protocol::Unknown
         }
     }
 }

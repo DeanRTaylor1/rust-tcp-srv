@@ -8,7 +8,6 @@ pub enum HttpMethod {
     Patch,
     Delete,
     Unknown,
-    Unsupported,
 }
 
 impl FromStr for HttpMethod {

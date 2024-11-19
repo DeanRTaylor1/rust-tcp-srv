@@ -49,6 +49,16 @@ impl HttpHandler {
             .add_route(Route::new(path, HttpMethod::Post, handler));
     }
 
+    pub fn put(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) {
+        self.routes
+            .add_route(Route::new(path, HttpMethod::Put, handler));
+    }
+
+    pub fn delete(&mut self, path: &str, handler: fn(&Context) -> Vec<u8>) {
+        self.routes
+            .add_route(Route::new(path, HttpMethod::Delete, handler));
+    }
+
     pub fn handle(&self, buffer: &[u8]) -> Res {
         match HttpRequest::parse(buffer) {
             Some(request) => {

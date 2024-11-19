@@ -66,12 +66,11 @@ impl Logger {
             HttpMethod::Put => (ColorCode::BG_YELLOW, "      "),
             HttpMethod::Patch => (ColorCode::BG_MAGENTA, "    "),
             HttpMethod::Delete => (ColorCode::BG_RED, "   "),
-            HttpMethod::Unsupported => (ColorCode::BG_MAGENTA, "   "),
             HttpMethod::Unknown => (ColorCode::BG_BLACK, ""),
         };
 
         Some(format!(
-            "{} {}{} =>{}",
+            "{} {}{} => {}",
             color.0,
             method,
             padding,
@@ -182,7 +181,6 @@ impl Display for HttpMethod {
             HttpMethod::Put => write!(f, "PUT"),
             HttpMethod::Patch => write!(f, "PATCH"),
             HttpMethod::Delete => write!(f, "DELETE"),
-            HttpMethod::Unsupported => write!(f, "UNSUPPORTED"),
             HttpMethod::Unknown => write!(f, "UNKNOWN"),
         }
     }
