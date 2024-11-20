@@ -7,6 +7,7 @@ use rust_tcp_srv::{
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let mut server = Server::new(Config::default());
+    server.static_file("/", "index.html");
     routes(&mut server);
     register_middleware(&mut server);
     server.run().await
@@ -77,10 +78,10 @@ fn routes(server: &mut Server) {
 
     server
         .router
-        .get("/", root_handler)
+        .get("/api", root_handler)
         .get("/user/:id", user_handler)
         .get("/cookies", cookies_handler)
-        .post("/", post_handler)
+        .post("/api", post_handler)
         .add_group(data)
         .add_group(user_group);
 }

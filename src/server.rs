@@ -5,7 +5,7 @@ use crate::{
     logger::LogLevel,
     Logger,
 };
-use std::{io, sync::Arc};
+use std::{collections::HashMap, io, sync::Arc};
 use tokio::net::TcpListener;
 
 pub struct Server {
@@ -16,6 +16,7 @@ pub struct Server {
     http_handler: Option<Arc<HttpHandler>>,
     pub middleware: MiddlewareHandler,
     shared_middleware: Option<Arc<MiddlewareHandler>>,
+    static_files: HashMap<String, &'static str>,
 }
 
 impl Server {
@@ -28,7 +29,12 @@ impl Server {
             http_handler: None,
             middleware: MiddlewareHandler::new(),
             shared_middleware: None,
+            static_files: HashMap::new(),
         }
+    }
+
+    pub fn static_file(&mut self, route: &str, file_path: &'static str) {
+        self.static_files.insert(route.to_string(), file_path);
     }
 
     pub async fn run(&mut self) -> io::Result<()> {
@@ -49,9 +55,12 @@ impl Server {
             MiddlewareHandler::new(),
         )));
 
+        let static_files = Arc::new(std::mem::replace(&mut self.static_files, HashMap::new()));
+
         self.http_handler = Some(Arc::new(HttpHandler::new(
             self.shared_router.as_ref().unwrap().clone(),
             self.shared_middleware.as_ref().unwrap().clone(),
+            static_files,
         )));
 
         let addr = format!("{}:{}", self.config.host, self.config.port);

@@ -1,6 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
-use super::{HttpMethod, HttpRequest, MiddlewareHandler, ResponseBuilder, RouteManager};
+use super::{
+    files::StaticHandler, HttpMethod, HttpRequest, MiddlewareHandler, ResponseBuilder, RouteManager,
+};
 
 pub struct RequestResponse {
     pub method: HttpMethod,
@@ -8,12 +10,6 @@ pub struct RequestResponse {
     pub ip: String,
     pub status: u16,
     pub duration: std::time::Duration,
-}
-
-#[derive(Debug)]
-pub struct HttpHandler {
-    routes: Arc<RouteManager>,
-    middleware: Arc<MiddlewareHandler>,
 }
 
 pub struct Res {
@@ -27,21 +23,44 @@ impl Res {
     }
 }
 
+#[derive(Debug)]
+pub struct HttpHandler {
+    routes: Arc<RouteManager>,
+    middleware: Arc<MiddlewareHandler>,
+    static_files: Arc<HashMap<String, &'static str>>,
+}
+
 impl HttpHandler {
-    pub fn new(router: Arc<RouteManager>, middleware: Arc<MiddlewareHandler>) -> Self {
+    pub fn new(
+        router: Arc<RouteManager>,
+        middleware: Arc<MiddlewareHandler>,
+        static_files: Arc<HashMap<String, &'static str>>,
+    ) -> Self {
         Self {
             routes: router,
             middleware,
+            static_files,
         }
     }
 
     pub fn handle(&self, buffer: &[u8]) -> Res {
         match HttpRequest::parse(buffer) {
             Some(request) => {
+                if let Some(file_path) = self.static_files.get(&request.path) {
+                    if let Some((data, mime)) = StaticHandler::serve(file_path) {
+                        return Res::new(
+                            ResponseBuilder::ok()
+                                .header("Content-Type", mime.as_str())
+                                .body(data)
+                                .build(),
+                            200,
+                        );
+                    }
+                }
+
                 if let Some(route) = self.routes.find_route(&request.path, request.method) {
                     let params = self.extract_params(&route.pattern, &request.path);
                     let context = Context { request, params };
-
                     match self.middleware.run(context, route) {
                         Ok(ctx) => Res::new((route.handler)(&ctx), 200),
                         Err(res) => res,

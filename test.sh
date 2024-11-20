@@ -52,7 +52,7 @@ echo "🚀 Starting HTTP Server Tests"
 echo "=============================="
 
 # Basic GET request
-test_request "GET" "/" 200 "" "Basic GET request to root"
+test_request "GET" "/api" 200 "" "Basic GET request to root"
 
 test_request "GET" "/user/10" 200 "10" "Basic GET request to user endpoint"
 
@@ -60,7 +60,7 @@ test_request "GET" "/user/10" 200 "10" "Basic GET request to user endpoint"
 test_request "GET" "/notfound" 404 "" "GET request to non-existent endpoint"
 
 # POST request with JSON data
-test_request "POST" "/" 201 '{"message":"test"}' "POST request with JSON payload"
+test_request "POST" "/api" 201 '{"message":"test"}' "POST request with JSON payload"
 
 # PUT request
 test_request "PUT" "/api/data/1" 201 '{"name":"updated"}' "PUT request with JSON payload"
@@ -69,7 +69,7 @@ test_request "PUT" "/api/data/1" 201 '{"name":"updated"}' "PUT request with JSON
 test_request "DELETE" "/api/data/1" 200 "" "DELETE request"
 
 # Bad request test
-test_request "POST" "/" 400 'invalid-json' "POST request with invalid JSON"
+test_request "POST" "/api" 400 'invalid-json' "POST request with invalid JSON"
 
 # # Test CORS preflight
 # test_request "OPTIONS" "/" 200 "" "" "OPTIONS request for CORS"
