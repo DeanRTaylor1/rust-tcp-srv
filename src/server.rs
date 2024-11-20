@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     connection::Connection,
-    http::{HttpHandler, RouteManager},
+    http::{HttpHandler, MiddlewareHandler, RouteManager},
     logger::LogLevel,
     Logger,
 };
@@ -14,6 +14,8 @@ pub struct Server {
     pub router: RouteManager,
     shared_router: Option<Arc<RouteManager>>,
     http_handler: Option<Arc<HttpHandler>>,
+    pub middleware: MiddlewareHandler,
+    shared_middleware: Option<Arc<MiddlewareHandler>>,
 }
 
 impl Server {
@@ -24,6 +26,8 @@ impl Server {
             router: RouteManager::new(),
             shared_router: None,
             http_handler: None,
+            middleware: MiddlewareHandler::new(),
+            shared_middleware: None,
         }
     }
 
@@ -40,8 +44,14 @@ impl Server {
             RouteManager::new(),
         )));
 
+        self.shared_middleware = Some(Arc::new(std::mem::replace(
+            &mut self.middleware,
+            MiddlewareHandler::new(),
+        )));
+
         self.http_handler = Some(Arc::new(HttpHandler::new(
             self.shared_router.as_ref().unwrap().clone(),
+            self.shared_middleware.as_ref().unwrap().clone(),
         )));
 
         let addr = format!("{}:{}", self.config.host, self.config.port);

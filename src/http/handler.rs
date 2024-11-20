@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use super::{HttpMethod, HttpRequest, ResponseBuilder, RouteManager};
+use super::{HttpMethod, HttpRequest, MiddlewareHandler, ResponseBuilder, RouteManager};
 
 pub struct RequestResponse {
     pub method: HttpMethod,
@@ -13,6 +13,7 @@ pub struct RequestResponse {
 #[derive(Debug)]
 pub struct HttpHandler {
     routes: Arc<RouteManager>,
+    middleware: Arc<MiddlewareHandler>,
 }
 
 pub struct Res {
@@ -27,8 +28,11 @@ impl Res {
 }
 
 impl HttpHandler {
-    pub fn new(router: Arc<RouteManager>) -> Self {
-        Self { routes: router }
+    pub fn new(router: Arc<RouteManager>, middleware: Arc<MiddlewareHandler>) -> Self {
+        Self {
+            routes: router,
+            middleware,
+        }
     }
 
     pub fn handle(&self, buffer: &[u8]) -> Res {
@@ -37,7 +41,11 @@ impl HttpHandler {
                 if let Some(route) = self.routes.find_route(&request.path, request.method) {
                     let params = self.extract_params(&route.pattern, &request.path);
                     let context = Context { request, params };
-                    Res::new((route.handler)(&context), 200)
+
+                    match self.middleware.run(context, route) {
+                        Ok(ctx) => Res::new((route.handler)(&ctx), 200),
+                        Err(res) => res,
+                    }
                 } else {
                     Res::new(ResponseBuilder::not_found().text("Not Found").build(), 404)
                 }

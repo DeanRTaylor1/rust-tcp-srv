@@ -1,5 +1,5 @@
 use rust_tcp_srv::{
-    http::{Context, ResponseBuilder},
+    http::{Context, MiddlewareResult, ResponseBuilder},
     logger::LogLevel,
     Config, Logger, Server,
 };
@@ -8,6 +8,7 @@ use rust_tcp_srv::{
 async fn main() -> std::io::Result<()> {
     let mut server = Server::new(Config::default());
     routes(&mut server);
+    register_middleware(&mut server);
     server.run().await
 }
 
@@ -28,9 +29,12 @@ fn user_handler(ctx: &Context) -> Vec<u8> {
 
 fn cookies_handler(ctx: &Context) -> Vec<u8> {
     let cookies = ctx.request.cookies();
-    ResponseBuilder::ok()
-        .json(serde_json::to_string(&cookies).unwrap())
-        .build()
+    match serde_json::to_string(&cookies) {
+        Ok(json) => ResponseBuilder::ok().json(json).build(),
+        Err(_) => ResponseBuilder::server_error()
+            .text("Failed to serialize cookies")
+            .build(),
+    }
 }
 
 fn post_handler(ctx: &Context) -> Vec<u8> {
@@ -79,4 +83,30 @@ fn routes(server: &mut Server) {
         .post("/", post_handler)
         .add_group(data)
         .add_group(user_group);
+}
+
+fn global_middleware(ctx: Context) -> MiddlewareResult {
+    let logger = Logger::new();
+    logger.log(LogLevel::Info, "Global Middleware executed");
+    Ok(ctx)
+}
+
+fn specific_middleware(ctx: Context) -> MiddlewareResult {
+    let logger = Logger::new();
+    logger.log(
+        LogLevel::Info,
+        format!(
+            "Specific Middleware executed in route: {}",
+            ctx.request.path
+        )
+        .as_str(),
+    );
+    Ok(ctx)
+}
+
+fn register_middleware(server: &mut Server) {
+    server.middleware.add_global(global_middleware);
+    server
+        .middleware
+        .for_route("/api/data/*", specific_middleware);
 }

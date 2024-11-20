@@ -1,4 +1,4 @@
-use crate::Logger;
+use crate::{logger, Logger};
 
 use super::{handler::Context, HttpMethod};
 
@@ -91,6 +91,7 @@ impl RouteManager {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Route {
     pub pattern: String,
+    pub raw_path: String,
     pub path_params: Vec<String>,
     pub method: HttpMethod,
     pub handler: fn(&Context) -> Vec<u8>,
@@ -103,8 +104,22 @@ impl Route {
             .filter(|s| s.starts_with(':'))
             .map(|s| s[1..].to_string())
             .collect();
+
+        let raw_path = pattern
+            .split('/')
+            .take_while(|s| !s.starts_with(':'))
+            .collect::<Vec<_>>()
+            .join("/");
+
+        let logger = Logger::new();
+        logger.log(
+            logger::LogLevel::Info,
+            &format!("raw_path: {} | path_params: {:?}", raw_path, path_params),
+        );
+
         Self {
             pattern: pattern.to_string(),
+            raw_path,
             path_params,
             method,
             handler,
