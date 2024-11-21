@@ -1,3 +1,7 @@
+use flate2::{write::GzEncoder, Compression};
+use std::io::Write;
+use crate::Logger;
+
 #[derive(Default)]
 pub struct ResponseBuilder {
     status_line: String,
@@ -21,13 +25,12 @@ impl ResponseBuilder {
     pub const HTML: &'static str = "text/html";
     pub const JSON: &'static str = "application/json";
 
-    pub fn new() -> Self {
-        Self {
-            status_line: format!("HTTP/1.1 {} {}", Self::OK.0, Self::OK.1),
-            headers: Vec::new(),
-            body: Vec::new(),
-        }
-    }
+    const COMPRESSIBLE_TYPES: [&'static str; 4] = [
+        "text/plain", "text/html", "text/css", "application/json",
+    ];
+    const MIN_COMPRESS_SIZE: usize = 1400;
+
+    pub fn new() -> Self { Self::default() }
 
     pub fn status(mut self, status: (u16, &str)) -> Self {
         self.status_line = format!("HTTP/1.1 {} {}", status.0, status.1);
@@ -64,7 +67,46 @@ impl ResponseBuilder {
             .body(body.as_ref().as_bytes().to_vec())
     }
 
-    pub fn build(self) -> Vec<u8> {
+    fn get_accepted_encoding(&self) -> Option<&str> {
+        self.headers.iter()
+            .find(|(k, _)| k == "Accept-Encoding")
+            .map(|(_, v)| v.as_str())
+    }
+
+    fn should_compress(&self) -> bool {
+        self.headers.iter()
+            .any(|(k, v)| k == "Content-Type" && Self::COMPRESSIBLE_TYPES.contains(&v.as_str()))
+            && self.body.len() > Self::MIN_COMPRESS_SIZE
+            && self.get_accepted_encoding()
+            .map_or(false, |enc| enc.to_lowercase().contains("gzip"))
+    }
+
+    fn compress_body(&mut self) -> bool {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        match encoder.write_all(&self.body)
+            .and_then(|_| encoder.finish()) {
+            Ok(compressed) if compressed.len() < self.body.len() => {
+                self.body = compressed;
+                self.headers.push(("Content-Encoding".to_string(), "gzip".to_string()));
+                self.headers.retain(|(k, _)| k != "Content-Length");
+                self.headers.push(("Content-Length".to_string(), self.body.len().to_string()));
+                true
+            }
+            _ => false
+        }
+    }
+
+    pub fn build(mut self) -> Vec<u8> {
+
+        if self.should_compress() {
+            let logger = Logger::new();
+            logger.log(
+                crate::logger::LogLevel::Info,
+                "Compressing response body",
+            );
+            self.compress_body();
+        }
+
         let mut response = Vec::new();
 
         // Add status line
