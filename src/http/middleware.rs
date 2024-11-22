@@ -7,7 +7,7 @@ use super::{handler::Res, routes::Route, Context};
 pub type MiddlewareResult = Result<Context, Res>;
 pub type MiddlewareFn = fn(Context) -> MiddlewareResult;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MiddlewareHandler {
     global: Vec<MiddlewareFn>,
     route_specific: HashMap<String, Vec<MiddlewareFn>>,

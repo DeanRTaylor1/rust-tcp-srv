@@ -9,13 +9,12 @@ use std::{collections::HashMap, io, sync::Arc};
 use tokio::net::TcpListener;
 
 pub struct Server {
+    pub router: RouteManager,
+    pub middleware: MiddlewareHandler,
+
     config: Config,
     logger: Logger,
-    pub router: RouteManager,
-    shared_router: Option<Arc<RouteManager>>,
     http_handler: Option<Arc<HttpHandler>>,
-    pub middleware: MiddlewareHandler,
-    shared_middleware: Option<Arc<MiddlewareHandler>>,
     static_files: HashMap<String, &'static str>,
 }
 
@@ -25,10 +24,8 @@ impl Server {
             config,
             logger: Logger::new(),
             router: RouteManager::new(),
-            shared_router: None,
             http_handler: None,
             middleware: MiddlewareHandler::new(),
-            shared_middleware: None,
             static_files: HashMap::new(),
         }
     }
@@ -45,22 +42,14 @@ impl Server {
             )
         }
 
-        self.shared_router = Some(Arc::new(std::mem::replace(
-            &mut self.router,
-            RouteManager::new(),
-        )));
-
-        self.shared_middleware = Some(Arc::new(std::mem::replace(
-            &mut self.middleware,
-            MiddlewareHandler::new(),
-        )));
-
-        let static_files = Arc::new(std::mem::replace(&mut self.static_files, HashMap::new()));
+        let shared_router = Arc::new(std::mem::take(&mut self.router));
+        let shared_middleware = Arc::new(std::mem::take(&mut self.middleware));
+        let static_files = Arc::new(std::mem::take(&mut self.static_files));
 
         self.http_handler = Some(Arc::new(HttpHandler::new(
-            self.shared_router.as_ref().unwrap().clone(),
-            self.shared_middleware.as_ref().unwrap().clone(),
-            static_files,
+            shared_router,
+            shared_middleware,
+            static_files
         )));
 
         let addr = format!("{}:{}", self.config.host, self.config.port);

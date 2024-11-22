@@ -2,7 +2,7 @@ use crate::{logger, Logger};
 
 use super::{handler::Context, HttpMethod};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RouteManager {
     routes: Vec<Route>,
     logger: Logger,
